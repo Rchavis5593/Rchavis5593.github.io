@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Random Shader</title>
+  <style>
+    body{font-family:system-ui;background:#111;color:#eee;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh}
+    button{padding:.75rem 1.5rem;font-size:1.2rem;border:none;border-radius:4px;background:#00aeff;color:#111;cursor:pointer}
+    #out{margin-top:1.5rem;font-size:1.4rem}
+    a{color:#00aeff}
+  </style>
+</head>
+<body>
+  <button id="go">Sign in with Bungie</button>
+  <div id="out"></div>
+
+  <script>
+    /* ========== CONFIG – CHANGE THESE THREE VALUES ========== */
+    const CLIENT_ID   = 'XXX';          // from Bungie app page
+    const API_KEY     = 'XXX';          // from Bungie app page
+    const REDIRECT    = 'https://YOUR-DOMAIN.com'; // exact redirect you registered
+    /* ======================================================== */
+
+    const AUTH_URL    = 'https://www.bungie.net/en/OAuth/Authorize';
+    const TOKEN_URL   = 'https://www.bungie.net/Platform/App/OAuth/token/';
+    const API_ROOT    = 'https://www.bungie.net/Platform';
+
+    const params = new URLSearchParams(location.search);
+    if(params.has('code')) finishAuth();          // returning from Bungie
+    else document.getElementById('go').onclick = () => startAuth();
+
+    /* ---------- OAuth dance ---------- */
+    function startAuth(){
+      const state = crypto.randomUUID();
+      localStorage.state = state;
+      location = `${AUTH_URL}?client_id=${CLIENT_ID}&response_type=code&state=${state}`;
+    }
+    async function finishAuth(){
+      const code  = params.get('code');
+      const state = params.get('state');
+      if(state !== localStorage.state) return alert('State mismatch');
+      history.replaceState({},'', location.pathname); // tidy URL
+
+      const tokenResp = await fetch(TOKEN_URL,{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/x-www-form-urlencoded',
+          'X-API-Key': API_KEY
+        },
+        body:new URLSearchParams({
+          grant_type:'authorization_code',
+          code,
+          client_id:CLIENT_ID
+        })
+      }).then(r=>r.json());
+
+      if(tokenResp.error) return alert(tokenResp.error);
+      const access = tokenResp.access_token.value;
+      localStorage.access = access;
+      loadInventory(access);
+    }
+
+    /* ---------- Grab a random shader ---------- */
+    async function loadInventory(access){
+      const out = document.getElementById('out');
+      out.textContent = 'Reading your vault…';
+
+      // 1. membership
+      const mem = await bungie('/User/GetMembershipsForCurrentUser/', access);
+      const destId = mem.Response.destinyMemberships[0].membershipId;
+      const type   = mem.Response.destinyMemberships[0].membershipType;
+
+      // 2. profile → profileInventory (vault) + characterInventories
+      const prof = await bungie(`/Destiny2/${type}/Profile/${destId}/?components=102,201`, access);
+
+      const allItems = [
+        ...Object.values(prof.Response.profileInventory.data.items),
+        ...Object.values(prof.Response.characterInventories.data).flatMap(c=>c.items)
+      ];
+
+      // 3. filter shaders
+      const shaders = allItems.filter(i => i.bucketHash === 2973005342); // shader bucket
+      if(!shaders.length) return out.textContent = 'No shaders found 😢';
+
+      const pick = shaders[Math.floor(Math.random()*shaders.length)];
+      const hash = pick.itemHash;
+
+      // 4. resolve hash → human name
+      const manifest = await bungie(`/Destiny2/Manifest/DestinyInventoryItemDefinition/${hash}/`, access);
+      const name = manifest.Response.displayProperties.name;
+
+      out.innerHTML = `Your random shader: <strong>${name}</strong>`;
+    }
+
+    /* ---------- tiny helper ---------- */
+    async function bungie(endpoint, token){
+      const r = await fetch(API_ROOT + endpoint,{
+        headers:{
+          'X-API-Key': API_KEY,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      return r.json();
+    }
+  </script>
+</body>
+</html>
