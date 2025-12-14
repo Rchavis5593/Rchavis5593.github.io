@@ -18,7 +18,7 @@
     /* ========== CONFIG – CHANGE THESE THREE VALUES ========== */
     const CLIENT_ID   = '51196';          // from Bungie app page
     const API_KEY     = 'c7c7b15b23794c30baa482f5c17176b5';          // from Bungie app page
-    const REDIRECT    = 'https://rchavis5593.github.io/'; // exact redirect you registered
+    const REDIRECT    = 'https://rchavis5593.github.io'; // exact redirect you registered
     /* ======================================================== */
 
     const AUTH_URL    = 'https://www.bungie.net/en/OAuth/Authorize';
@@ -51,18 +51,21 @@
           grant_type:'authorization_code',
           code,
           client_id:CLIENT_ID,
-          client_secret: ''
+          client_secret: '',
+          redirect_uri: REDIRECT
         })
       }).then(r=>r.json());
 
       if(tokenResp.error) return alert(tokenResp.error);
       const access = tokenResp.access_token.value;
-      localStorage.access = access;
-      loadInventory(access);
+      localStorage.setItem('access', access);     // save
+      await loadInventory();   
     }
 
     /* ---------- Grab a random shader ---------- */
-    async function loadInventory(access){
+    async function loadInventory(){
+      const access = localStorage.getItem('access'); // read it back
+      if (!access) throw new Error('No token');  
       const out = document.getElementById('out');
       out.textContent = 'Reading your vault…';
 
