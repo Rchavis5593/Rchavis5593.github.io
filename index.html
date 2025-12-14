@@ -50,7 +50,7 @@
         body:new URLSearchParams({
           grant_type:'authorization_code',
           code,
-          client_id:CLIENT_ID
+          client_id:CLIENT_ID,
           client_secret: ''
         })
       }).then(r=>r.json());
